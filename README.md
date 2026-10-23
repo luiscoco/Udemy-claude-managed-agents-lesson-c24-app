@@ -42,26 +42,82 @@ CLAUDE_MANAGED_ENVIRONMENT_ID=your_environment_id
 PORT=3024
 ```
 
-## How the application was developed
+## How the app was build
 
-The browser collects inputs; the Node host validates requests; the lesson implementation produces observable evidence. The architecture page walks through the real source with numbered steps, prerequisite configuration, source filenames and code excerpts.
+### 1. Replay deterministic approval observations
 
-### Lesson implementation
+The authored sequence records one confirmation per distinct ask label and tracks requires_action versus end_turn. The small fixture uses labels as IDs to exercise the host contract.
 
-[src/lesson.ts](https://github.com/luiscoco/Udemy-claude-managed-agents-lesson-c24-app/blob/main/src/lesson.ts)
+Source: [src/lesson.ts](src/lesson.ts#L13) · selected statements
 
 ```typescript
-  async run(input) {
+const seen = new Set<string>(),
+  confirmations: Input[] = [];
 
-const seen=new Set<string>(), confirmations:Input[]=[];let state="incomplete";
-for(const item of list(input,"events")){const kind=String(item);if(seen.has(kind))continue;seen.add(kind);if(kind==="ask")confirmations.push({toolUseId:"sevt_fixture_write",decision:text(input,"decision")});if(kind==="requires_action")state="paused";if(kind==="end_turn")state="passed";}
-return report(state as "passed"|"paused"|"incomplete","Replayed an authored approval scenario",{fixtureSource:"authored",confirmations:confirmations.length,decisions:confirmations,remoteFileWritten:"not observed"},["Feed deterministic events","Deduplicate request identifiers","Record exactly one confirmation","Require terminal evidence"]);
+let state = "incomplete";
 
-  }
-};
+for (const item of list(input, "events")) {
+  const kind = String(item);
+  if (seen.has(kind)) continue;
+  seen.add(kind);
+  if (kind === "ask")
+    confirmations.push({
+      toolUseId: "sevt_fixture_write",
+      decision: text(input, "decision"),
+    });
+  if (kind === "requires_action") state = "paused";
+  if (kind === "end_turn") state = "passed";
+}
 ```
 
-Read the architecture page for the remaining source excerpts and explanations, including input handling and optional provider behavior. The diagram describes this application, rather than implying that an external integration has been implemented.
+### 2. Label the provenance and terminal evidence
+
+The result remains paused or incomplete unless the authored terminal event appears. fixtureSource is authored, and remoteFileWritten remains not observed; an offline approval test is not a live write test.
+
+Source: [src/lesson.ts](src/lesson.ts#L15)
+
+```typescript
+return report(
+  state as "passed" | "paused" | "incomplete",
+  "Replayed an authored approval scenario",
+  {
+    fixtureSource: "authored",
+    confirmations: confirmations.length,
+    decisions: confirmations,
+    remoteFileWritten: "not observed",
+  },
+  [
+    "Feed deterministic events",
+    "Deduplicate request identifiers",
+    "Record exactly one confirmation",
+    "Require terminal evidence",
+  ],
+);
+```
+
+### Check your understanding
+
+Run **Replay duplicate approval events** in the application. Compare the result with these scenario expectations:
+
+```json
+{
+  "input": {
+    "events": [
+      "ask",
+      "ask",
+      "requires_action",
+      "end_turn"
+    ],
+    "decision": "allow"
+  },
+  "expectedOutcome": "passed",
+  "checkEvidence": {
+    "confirmations": 1
+  }
+}
+```
+
+Then try **Replay a truncated stream**. Its expected outcome is `incomplete`; identify the condition or evidence field that explains the difference.
 
 ## Validation
 
