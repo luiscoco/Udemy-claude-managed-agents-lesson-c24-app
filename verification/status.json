@@ -1,0 +1,13 @@
+{
+  "lesson": "C24",
+  "title": "Evaluation, Testing and Offline Replay",
+  "path": "lesson-c24\\lesson-c24-app",
+  "port": 3024,
+  "scenarios": 2,
+  "state": "implemented and verified",
+  "liveScope": "text-only commentary about the local result",
+  "typecheck": true,
+  "localTests": true,
+  "browserSmoke": "passed: desktop, mobile, scenario controls, source view",
+  "liveCommentarySmoke": "passed: real text-only session reached end_turn"
+}

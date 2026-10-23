@@ -1,0 +1,29 @@
+{
+  "source": "live-provider-commentary",
+  "sessionId": "sesn_0131NPVaSjHstQj21qFE3iFt",
+  "answer": "This local experiment demonstrates an **offline replay testing approach**: deterministic, pre-authored events are fed through a pipeline, duplicate request identifiers are filtered out, and exactly one confirmation is recorded. The outcome is validated against a required terminal condition before the test is marked as passed. It is a self-contained fixture with no observed remote file writes or live tool execution.",
+  "stopReason": "end_turn",
+  "eventTypes": [
+    "session.status_running",
+    "session.thread_status_running",
+    "user.message",
+    "span.model_request_start",
+    "agent.thinking",
+    "agent.message",
+    "span.model_request_end",
+    "session.thread_status_idle",
+    "session.usage",
+    "session.status_idle"
+  ],
+  "requestUsage": [
+    {
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "input_tokens": 606,
+      "output_tokens": 109,
+      "speed": "standard"
+    }
+  ],
+  "experimentHash": "4794bd702cced38897d2ba16a8ac814ea2d2c45d3e640aeb1a311e22abe74890",
+  "scope": "A real text-only model response about the local experiment. External integrations and the experiment's correctness are not certified by this response."
+}

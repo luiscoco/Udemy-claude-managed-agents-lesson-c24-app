@@ -1,0 +1,64 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import type { BetaManagedAgentsSessionEvent as Event } from "@anthropic-ai/sdk/resources/beta/sessions/events";
+type Ask = Extract<Event, { type: "agent.tool_use" | "agent.mcp_tool_use" }>;
+type Confirmation = { toolUseId: string; result: "allow" | "deny" };
+export interface EventPort {
+  open(sessionId: string, signal: AbortSignal): AsyncIterable<Event>;
+  confirm(sessionId: string, decision: Confirmation): Promise<void>;
+}
+export class FixturePort implements EventPort {
+  readonly confirmations: Confirmation[] = [];
+  readonly events: readonly Event[];
+  constructor(events: readonly Event[]) { this.events = events; }
+  async *open(_sessionId: string, signal: AbortSignal) {
+    for (const event of this.events) { signal.throwIfAborted(); yield event; }
+  }
+  async confirm(_sessionId: string, decision: Confirmation) { this.confirmations.push(decision); }
+}
+export async function replay(port: EventPort, sessionId: string, decide: (call: Ask) => Promise<boolean>) {
+  const seen = new Set<string>();
+  const evidence = { outcome: "incomplete", lastStopReason: null as string | null, eventIds: [] as string[] };
+  for await (const event of port.open(sessionId, new AbortController().signal)) {
+    if (seen.has(event.id)) continue;
+    seen.add(event.id); evidence.eventIds.push(event.id);
+    if ((event.type === "agent.tool_use" || event.type === "agent.mcp_tool_use") && event.evaluated_permission === "ask") {
+      const allow = await decide(event);
+      await port.confirm(sessionId, { toolUseId: event.id, result: allow ? "allow" : "deny" });
+    }
+    if (event.type === "session.status_idle") {
+      evidence.lastStopReason = event.stop_reason.type;
+      evidence.outcome = event.stop_reason.type === "end_turn" ? "turn-ended" : "paused";
+    }
+    if (event.type === "session.status_running") evidence.outcome = "incomplete";
+    if (event.type === "session.error") evidence.outcome = "error-observed";
+  }
+  return evidence;
+}
+const at = "2026-10-20T10:00:00Z";
+export const askWrite: Event = { id: "sevt_write", type: "agent.tool_use", name: "write",
+  input: { path: "/mnt/session/outputs/draft.md", content: "Status: reviewed" },
+  evaluated_permission: "ask", evaluation: { type: "always_ask" }, processed_at: at };
+export const requiresAction: Event = { id: "sevt_wait", type: "session.status_idle", processed_at: at,
+  stop_details: null, stop_reason: { type: "requires_action", event_ids: ["sevt_write"] } };
+export const endTurn: Event = { id: "sevt_end", type: "session.status_idle", processed_at: at,
+  stop_details: null, stop_reason: { type: "end_turn" } };
+test("authored replay correlates one confirmation and records the ending event", async () => {
+  const port = new FixturePort([askWrite, askWrite, requiresAction, endTurn]);
+  const evidence = await replay(port, "fixture-session", async call => call.name === "write" &&
+    call.input.path === "/mnt/session/outputs/draft.md");
+  assert.deepEqual(port.confirmations, [{ toolUseId: "sevt_write", result: "allow" }]);
+  assert.equal(evidence.outcome, "turn-ended");
+  assert.equal(evidence.lastStopReason, "end_turn");
+  assert(evidence.eventIds.includes("sevt_end"));
+});
+test("a pause and a truncated fixture are not evidence of a completed turn", async () => {
+  const paused = await replay(new FixturePort([requiresAction]), "fixture-session", async () => false);
+  assert.equal(paused.outcome, "paused");
+  const incomplete = await replay(new FixturePort([askWrite]), "fixture-session", async () => false);
+  assert.equal(incomplete.outcome, "incomplete");
+});
+// Run: node --test Lesson-C24-Code-Snippets.ts (Node with TypeScript stripping support).
+// Same interface is useful for a live adapter, but does not prove that adapter's correctness.
+// Single-process replay only: durable approval claims and uncertain sends need production handling.
+// Authored events prove router behavior, not model skill, real permissions or a written file.
